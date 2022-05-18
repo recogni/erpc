@@ -104,6 +104,7 @@
 //! FreeRTOS can be detected when building with compilers that support __has_include().
 //! Otherwise, the default is no threading.
 //#define ERPC_THREADS (ERPC_THREADS_FREERTOS)
+#define EPRC_THREADS (ERPC_THREADS_ZEPHYR)
 
 //! @def ERPC_DEFAULT_BUFFER_SIZE
 //!
