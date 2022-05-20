@@ -14,11 +14,12 @@
 #include <err.h>
 #endif
 #include <errno.h>
-#include <netdb.h>
-#include <netinet/tcp.h>
+//#include <posix/netdb.h>
+//#include <posix/netinet/tcp.h>
 #include <signal.h>
 #include <string>
-#include <sys/socket.h>
+//#include <sys/socket.h> 
+#include <net/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
 
