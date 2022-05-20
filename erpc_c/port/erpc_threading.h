@@ -156,7 +156,7 @@ public:
 #elif ERPC_THREADS_IS(FREERTOS)
         return reinterpret_cast<thread_id_t>(m_task);
 #elif ERPC_THREADS_IS(ZEPHYR)
-        return reinterpret_cast<thread_id_t>(m_thread);
+        return reinterpret_cast<thread_id_t>(m_task);
 #elif ERPC_THREADS_IS(MBED)
         return reinterpret_cast<thread_id_t>(m_thread->get_id());
 #elif ERPC_THREADS_IS(WIN32)
@@ -238,7 +238,8 @@ private:
     StaticTask_t m_staticTask; /*!< Hold static task data. */
 #endif
 #elif ERPC_THREADS_IS(ZEPHYR)
-    struct k_thread m_thread;  /*!< Current thread. */
+    struct k_thread m_thread;
+    k_tid_t m_task;            /*!< Current thread. */
     k_thread_stack_t *m_stack; /*!< Pointer to stack. */
 #elif ERPC_THREADS_IS(MBED)
     rtos::Thread *m_thread; /*!< Underlying Thread instance */
@@ -282,7 +283,7 @@ private:
      * @param[in] arg2
      * @param[in] arg3
      */
-    static void *threadEntryPointStub(void *arg1, void *arg2, void *arg3);
+    static void threadEntryPointStub(void *arg1, void *arg2, void *arg3);
 
 #elif ERPC_THREADS_IS(MBED)
 
@@ -413,7 +414,7 @@ private:
     SemaphoreHandle_t m_mutex;       /*!< Mutex.*/
     StaticSemaphore_t m_staticQueue; /*!< Static queue. */
 #elif ERPC_THREADS_IS(ZEPHYR)
-    struct k_mutex m_mutex; /*!< Mutex.*/
+    mutable struct k_mutex m_mutex; /*!< Mutex.*/
 #elif ERPC_THREADS_IS(MBED)
     rtos::Mutex *m_mutex;   /*!< Mutex. */
 #elif ERPC_THREADS_IS(WIN32)
@@ -489,7 +490,7 @@ public:
      *
      * @return Semaphore count number.
      */
-    int getCount(void) const;
+    int getCount(void) /* const */;
 
 private:
 #if ERPC_THREADS_IS(PTHREADS)
