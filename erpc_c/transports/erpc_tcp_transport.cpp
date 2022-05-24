@@ -226,12 +226,14 @@ erpc_status_t TCPTransport::underlyingReceive(uint8_t *data, uint32_t size)
 {
     ssize_t length;
     erpc_status_t status = kErpcStatus_Success;
+    int sleep_time = 1000000;
 
     // Block until we have a valid connection.
     while (m_socket <= 0)
     {
         // Sleep 10 ms.
-        Thread::sleep(10000);
+        printk("Wait for socket\n");
+        Thread::sleep(sleep_time);
     }
 
     // Loop until all requested data is received.

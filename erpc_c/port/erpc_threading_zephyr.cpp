@@ -11,6 +11,7 @@
 
 #if ERPC_THREADS_IS(ZEPHYR)
 
+K_THREAD_STACK_DEFINE(erpc_thread_stack, 4096);
 using namespace erpc;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -24,7 +25,7 @@ Thread::Thread(const char *name)
 , m_stackSize(0)
 , m_priority(0)
 , m_task(0)
-, m_stack(0)
+//, m_stack(0)
 {
 }
 
@@ -36,7 +37,7 @@ Thread::Thread(thread_entry_t entry, uint32_t priority, uint32_t stackSize, cons
 , m_stackSize(stackSize)
 , m_priority(priority)
 , m_task(0)
-, m_stack(0)
+//, m_stack()
 {
 }
 
@@ -48,15 +49,18 @@ void Thread::init(thread_entry_t entry, uint32_t priority, uint32_t stackSize, t
     m_stackSize = stackSize;
     m_priority = priority;
     m_stackPtr = stackPtr;
+//    m_stack = (k_thread_stack_t*)stackPtr;
 }
 
 void Thread::start(void *arg)
 {
     m_arg = arg;
 
-    erpc_assert(m_stack && "Set stack address");
+    printk("m_stack = 0x%p\n", m_stack);
+    printk("erpc_thread_stack = 0x%p\n", erpc_thread_stack);
+    //erpc_assert(m_stack && "Set stack address");
     printk("eprc: Creating thread\n");
-    m_task = k_thread_create(&m_thread, m_stack, m_stackSize, threadEntryPointStub, this, NULL, NULL, m_priority, 0, K_NO_WAIT);
+    m_task = k_thread_create(&m_thread, erpc_thread_stack, 4096, threadEntryPointStub, this, NULL, NULL, m_priority, 0, K_NO_WAIT);
 }
 
 bool Thread::operator==(Thread &o)
