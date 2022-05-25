@@ -14,11 +14,8 @@
 #include <err.h>
 #endif
 #include <errno.h>
-//#include <posix/netdb.h>
-//#include <posix/netinet/tcp.h>
 #include <signal.h>
 #include <string>
-//#include <sys/socket.h> 
 #include <net/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -27,11 +24,11 @@ using namespace erpc;
 
 // Set this to 1 to enable debug logging.
 // TODO fix issue with the transport not working on Linux if debug logging is disabled.
-//#define TCP_TRANSPORT_DEBUG_LOG (1)
+#define TCP_TRANSPORT_DEBUG_LOG (1)
 
 #if TCP_TRANSPORT_DEBUG_LOG
 #define TCP_DEBUG_PRINT(_fmt_, ...) printf(_fmt_, ##__VA_ARGS__)
-#define TCP_DEBUG_ERR(_msg_) err(errno, _msg_)
+#define TCP_DEBUG_ERR(_msg_) printf(_msg_)
 #else
 #define TCP_DEBUG_PRINT(_fmt_, ...)
 #define TCP_DEBUG_ERR(_msg_)
@@ -97,9 +94,10 @@ erpc_status_t TCPTransport::connectClient(void)
     int sock = -1;
     struct addrinfo *res;
 
+    TCP_DEBUG_PRINT("Entering ConnectClient\n");
     if (m_socket != -1)
     {
-        TCP_DEBUG_PRINT("%s", "socket already connected\n");
+        TCP_DEBUG_PRINT("socket already connected\n");
     }
     else
     {
@@ -109,10 +107,11 @@ erpc_status_t TCPTransport::connectClient(void)
         hints.ai_socktype = SOCK_STREAM;
 
         // Convert port number to a string.
+        TCP_DEBUG_PRINT("ConnectClient, port %d\n", m_port);
         result = snprintf(portString, sizeof(portString), "%d", m_port);
         if (result < 0)
         {
-            TCP_DEBUG_ERR("snprintf failed");
+            TCP_DEBUG_ERR("snprintf failed\n");
             status = kErpcStatus_Fail;
         }
 
@@ -123,7 +122,7 @@ erpc_status_t TCPTransport::connectClient(void)
             if (result != 0)
             {
                 // TODO check EAI_NONAME
-                TCP_DEBUG_ERR("gettaddrinfo failed");
+                TCP_DEBUG_ERR("gettaddrinfo failed\n");
                 status = kErpcStatus_UnknownName;
             }
         }
@@ -160,7 +159,7 @@ erpc_status_t TCPTransport::connectClient(void)
             if (sock < 0)
             {
                 // TODO check EADDRNOTAVAIL:
-                TCP_DEBUG_ERR("connecting failed");
+                TCP_DEBUG_ERR("connecting failed\n");
                 status = kErpcStatus_ConnectionFailure;
             }
         }
@@ -171,7 +170,7 @@ erpc_status_t TCPTransport::connectClient(void)
             if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (void *)&set, sizeof(int)) < 0)
             {
                 ::close(sock);
-                TCP_DEBUG_ERR("setsockopt failed");
+                TCP_DEBUG_ERR("setsockopt failed\n");
                 status = kErpcStatus_Fail;
             }
         }
@@ -188,7 +187,7 @@ erpc_status_t TCPTransport::connectClient(void)
             if (setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, (void *)&set, sizeof(int)) < 0)
             {
                 ::close(sock);
-                TCP_DEBUG_ERR("setsockopt failed");
+                TCP_DEBUG_ERR("setsockopt failed\n");
                 status = kErpcStatus_Fail;
             }
         }
@@ -208,6 +207,7 @@ erpc_status_t TCPTransport::connectClient(void)
 
 erpc_status_t TCPTransport::close(bool stopServer)
 {
+    printf("Enter TCPTransport::close:, stop server = %d\n", stopServer);
     if (m_isServer && stopServer)
     {
         m_runServer = false;
@@ -226,20 +226,23 @@ erpc_status_t TCPTransport::underlyingReceive(uint8_t *data, uint32_t size)
 {
     ssize_t length;
     erpc_status_t status = kErpcStatus_Success;
-    int sleep_time = 1000000;
+    int sleep_time = 10000;
 
     // Block until we have a valid connection.
     while (m_socket <= 0)
     {
         // Sleep 10 ms.
-        printk("Wait for socket\n");
         Thread::sleep(sleep_time);
     }
 
     // Loop until all requested data is received.
     while (size > 0U)
     {
-        length = read(m_socket, data, size);
+        length = zsock_recv(m_socket, data, size, 0);
+        if (length > 0)
+            TCP_DEBUG_PRINT("underlyingRx: Got data; len = %lu, %x %x %x %x\n", length, *(data), *(data+1), *(data+2), *(data+3));
+        else
+            TCP_DEBUG_PRINT("underlyingRx: empty buf from socket, %lu\n", length);
 
         // Length will be zero if the connection is closed.
         if (length > 0)
@@ -252,7 +255,7 @@ erpc_status_t TCPTransport::underlyingReceive(uint8_t *data, uint32_t size)
             if (length == 0)
             {
                 // close socket, not server
-                close(false);
+                zsock_close(false);
                 status = kErpcStatus_ConnectionClosed;
             }
             else
@@ -281,7 +284,7 @@ erpc_status_t TCPTransport::underlyingSend(const uint8_t *data, uint32_t size)
         // Loop until all data is sent.
         while (size > 0U)
         {
-            result = write(m_socket, data, size);
+            result = zsock_send(m_socket, data, size, 0);
             if (result >= 0)
             {
                 size -= result;
@@ -292,7 +295,7 @@ erpc_status_t TCPTransport::underlyingSend(const uint8_t *data, uint32_t size)
                 if (result == EPIPE)
                 {
                     // close socket, not server
-                    close(false);
+                    zsock_close(false);
                     status = kErpcStatus_ConnectionClosed;
                 }
                 else
@@ -321,10 +324,10 @@ void TCPTransport::serverThread(void)
     TCP_DEBUG_PRINT("%s", "in server thread\n");
 
     // Create socket.
-    serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+    serverSocket = zsock_socket(AF_INET, SOCK_STREAM, 0);
     if (serverSocket < 0)
     {
-        TCP_DEBUG_ERR("failed to create server socket");
+        TCP_DEBUG_ERR("failed to create server socket\n");
     }
     else
     {
@@ -335,20 +338,20 @@ void TCPTransport::serverThread(void)
         serverAddress.sin_port = htons(m_port);
 
         // Turn on reuse address option.
-        result = setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+        result = zsock_setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
         if (result < 0)
         {
-            TCP_DEBUG_ERR("setsockopt failed");
+            TCP_DEBUG_ERR("setsockopt failed\n");
             status = true;
         }
 
         if (!status)
         {
             // Bind socket to address.
-            result = bind(serverSocket, (struct sockaddr *)&serverAddress, sizeof(serverAddress));
+            result = zsock_bind(serverSocket, (struct sockaddr *)&serverAddress, sizeof(serverAddress));
             if (result < 0)
             {
-                TCP_DEBUG_ERR("bind failed");
+                TCP_DEBUG_ERR("bind failed\n");
                 status = true;
             }
         }
@@ -356,10 +359,10 @@ void TCPTransport::serverThread(void)
         if (!status)
         {
             // Listen for connections.
-            result = listen(serverSocket, 1);
+            result = zsock_listen(serverSocket, 1);
             if (result < 0)
             {
-                TCP_DEBUG_ERR("listen failed");
+                TCP_DEBUG_ERR("listen failed\n");
                 status = true;
             }
         }
@@ -372,18 +375,19 @@ void TCPTransport::serverThread(void)
             {
                 incomingAddressLength = sizeof(struct sockaddr);
                 // we should use select() otherwise we can't end the server properly
-                incomingSocket = accept(serverSocket, &incomingAddress, &incomingAddressLength);
+                incomingSocket = zsock_accept(serverSocket, &incomingAddress, &incomingAddressLength);
                 if (incomingSocket > 0)
                 {
                     // Successfully accepted a connection.
                     m_socket = incomingSocket;
                     // should be inherited from accept() socket but it's not always ...
+
                     yes = 1;
-                    setsockopt(m_socket, IPPROTO_TCP, TCP_NODELAY, (void *)&yes, sizeof(yes));
+                    zsock_setsockopt(m_socket, IPPROTO_TCP, TCP_NODELAY, (void *)&yes, sizeof(yes));
                 }
                 else
                 {
-                    TCP_DEBUG_ERR("accept failed");
+                    TCP_DEBUG_ERR("accept failed\n");
                 }
             }
         }
